@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Cattle Breed Identifier — Fixed</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .animate-spin { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .animate-pulse { animation: pulse 2s cubic-bezier(0.4,0,0.6,1) infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
+    .progress-bar { transition: width 1s ease-in-out; }
+    .hidden { display: none !important; }
+    .overflow-y-auto { overflow-y: auto; }
+    /* small responsive tweak for image fit */
+    img#selectedImage { object-fit: contain; max-height: 360px; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-6">
+  <div class="max-w-4xl mx-auto">
+    <header class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-gray-800 mb-4">🐄 AI Cattle Breed Identifier</h1>
+      <p class="text-gray-600 text-lg mb-4">Advanced AI system for identifying International & Indian cattle breeds (UI demo)</p>
+
+      <div class="inline-flex bg-white rounded-lg shadow-md p-1 mb-4">
+        <button id="allBreedsBtn" class="px-4 py-2 rounded-md transition-colors bg-blue-500 text-white">All Breeds (<span id="countAll">0</span>)</button>
+        <button id="indianBreedsBtn" class="px-4 py-2 rounded-md transition-colors text-gray-600 hover:bg-gray-100">🇮🇳 Indian (<span id="countIndian">0</span>)</button>
+        <button id="internationalBreedsBtn" class="px-4 py-2 rounded-md transition-colors text-gray-600 hover:bg-gray-100">🌍 International (<span id="countInternational">0</span>)</button>
+      </div>
+      <button id="toggleDatabaseBtn" class="text-blue-500 hover:text-blue-700 underline">View Breed Database</button>
+    </header>
+
+    <!-- Breed Database -->
+    <section id="breedDatabase" class="hidden md:col-span-2 bg-white rounded-xl shadow-lg p-6 mb-6">
+      <h2 class="text-2xl font-semibold mb-4 text-gray-800">Cattle Breed Database</h2>
+      <div id="breedGrid" class="grid lg:grid-cols-2 gap-4 max-h-96 overflow-y-auto"></div>
+    </section>
+
+    <div class="grid md:grid-cols-2 gap-6">
+      <!-- Input -->
+      <div class="bg-white rounded-xl shadow-lg p-6">
+        <h2 class="text-2xl font-semibold mb-4 text-gray-800">Image Input</h2>
+
+        <div class="space-y-4">
+          <button id="uploadBtn" class="w-full bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-lg flex items-center justify-center gap-2">
+            Upload Image
+          </button>
+          <button id="cameraBtn" class="w-full bg-green-500 hover:bg-green-600 text-white p-4 rounded-lg flex items-center justify-center gap-2">Use Camera</button>
+
+          <div id="cameraControls" class="hidden space-y-2">
+            <button id="captureBtn" class="w-full bg-green-500 hover:bg-green-600 text-white p-4 rounded-lg">Capture Photo</button>
+            <button id="stopCameraBtn" class="w-full bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg">Stop Camera</button>
+          </div>
+
+          <input id="fileInput" type="file" accept="image/*" class="hidden">
+        </div>
+
+        <div id="cameraPreview" class="hidden mt-4">
+          <video id="video" autoplay playsinline class="w-full rounded-lg"></video>
+        </div>
+
+        <div id="imagePreview" class="hidden mt-4">
+          <img id="selectedImage" src="" alt="Selected cattle" class="w-full rounded-lg shadow-md">
+          <button id="analyzeBtn" class="w-full mt-4 bg-purple-500 hover:bg-purple-600 text-white p-3 rounded-lg">Analyze Breed</button>
+        </div>
+
+        <canvas id="canvas" class="hidden"></canvas>
+      </div>
+
+      <!-- Results -->
+      <div class="bg-white rounded-xl shadow-lg p-6">
+        <h2 class="text-2xl font-semibold mb-4 text-gray-800">Analysis Results</h2>
+
+        <div id="initialState" class="text-center text-gray-500 py-8">
+          <p>Upload an image and click "Analyze Breed" to get started</p>
+        </div>
+
+        <div id="loadingState" class="hidden text-center py-8">
+          <svg class="w-12 h-12 animate-spin mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9"></path></svg>
+          <p class="text-gray-600">Analyzing cattle breed...</p>
+          <div class="mt-4 bg-gray-200 rounded-full h-2"><div class="bg-blue-500 h-2 rounded-full w-1/2 animate-pulse"></div></div>
+        </div>
+
+        <div id="results" class="hidden space-y-4">
+          <div id="mainPrediction" class="p-3 border rounded"></div>
+          <div id="alternatives" class="hidden">
+            <h4 class="font-semibold text-gray-700 mb-2">Alternative Matches:</h4>
+            <div id="alternativesList" class="space-y-2"></div>
+          </div>
+
+          <button id="resetBtn" class="w-full bg-gray-500 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors mb-2">Analyze Another Image</button>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-orange-100 p-2 rounded text-center"><span class="font-semibold text-orange-800">Indian Breeds</span><div class="text-orange-600">10 Available</div></div>
+            <div class="bg-blue-100 p-2 rounded text-center"><span class="font-semibold text-blue-800">International</span><div class="text-blue-600">4 Available</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section class="mt-8 bg-white rounded-xl shadow-lg p-6">
+      <h2 class="text-2xl font-semibold mb-4 text-gray-800">How It Works</h2>
+      <div class="grid md:grid-cols-3 gap-6 text-center">
+        <div class="p-4"><h3 class="font-semibold mb-2">1. Upload Image</h3><p class="text-sm text-gray-600">Select a clear photo of cattle from your device or capture one with your camera</p></div>
+        <div class="p-4"><h3 class="font-semibold mb-2">2. AI Analysis</h3><p class="text-sm text-gray-600">This demo simulates analysis and shows confidence scores. Replace simulateAIPrediction with a real model to integrate.</p></div>
+        <div class="p-4"><h3 class="font-semibold mb-2">3. Get Results</h3><p class="text-sm text-gray-600">Receive breed identification with confidence scores and detailed information</p></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // --- Database ---
+    const cattleBreeds = {
+      // International
+      'Holstein': { characteristics: 'Black and white patches, excellent milk production', origin: 'Netherlands/Germany', weight: '580-680 kg (female), 900-1000 kg (male)', type: 'Dairy', region: 'International' },
+      'Angus': { characteristics: 'Solid black or red color, excellent beef quality', origin: 'Scotland', weight: '550-650 kg (female), 850-1000 kg (male)', type: 'Beef', region: 'International' },
+      'Hereford': { characteristics: 'Red body with white face, hardy breed', origin: 'England', weight: '500-600 kg (female), 800-1100 kg (male)', type: 'Beef', region: 'International' },
+      'Jersey': { characteristics: 'Light brown/fawn color, high butterfat milk', origin: 'Jersey Island', weight: '350-400 kg (female), 540-680 kg (male)', type: 'Dairy', region: 'International' },
+
+      // Indian
+      'Gir': { characteristics: 'Distinctive curved horns, drooping ears, white/red patches', origin: 'Gujarat, India', weight: '385-400 kg (female), 545-600 kg (male)', type: 'Dairy', region: 'Indian', milkYield: '10-12 liters/day', specialty: 'A2 milk, heat tolerance' },
+      'Red Sindhi': { characteristics: 'Red color, compact body, heat resistant', origin: 'Sindh Province (now Pakistan), Rajasthan', weight: '340-400 kg (female), 450-500 kg (male)', type: 'Dual Purpose', region: 'Indian', milkYield: '8-10 liters/day', specialty: 'Tick resistance, adaptability' },
+      'Sahiwal': { characteristics: 'Light red to dark red, loose skin, prominent hump', origin: 'Punjab, Pakistan/India', weight: '350-400 kg (female), 400-500 kg (male)', type: 'Dairy', region: 'Indian', milkYield: '8-15 liters/day', specialty: 'Heat tolerance, disease resistance' },
+      'Tharparkar': { characteristics: 'White/light grey, medium sized, well developed udder', origin: 'Thar Desert, Rajasthan', weight: '350-400 kg (female), 450-500 kg (male)', type: 'Dual Purpose', region: 'Indian', milkYield: '8-10 liters/day', specialty: 'Drought tolerance, desert adaptation' },
+      'Rathi': { characteristics: 'White with brown/black patches, medium frame', origin: 'Rajasthan, India', weight: '300-350 kg (female), 400-450 kg (male)', type: 'Dual Purpose', region: 'Indian', milkYield: '6-8 liters/day', specialty: 'Heat tolerance, low maintenance' },
+      'Kankrej': { characteristics: 'Silver grey, black points, lyre-shaped horns', origin: 'Gujarat/Rajasthan border', weight: '400-450 kg (female), 500-600 kg (male)', type: 'Draft/Dual', region: 'Indian', milkYield: '5-8 liters/day', specialty: 'Draught power, endurance' },
+      'Haryana': { characteristics: 'White/light grey, compact body, straight horns', origin: 'Haryana, India', weight: '350-450 kg (female), 450-500 kg (male)', type: 'Dairy', region: 'Indian', milkYield: '8-10 liters/day', specialty: 'Good milk fat, hardy nature' },
+      'Ongole': { characteristics: 'White, massive frame, dewlap, short horns', origin: 'Andhra Pradesh, India', weight: '400-500 kg (female), 500-650 kg (male)', type: 'Draft/Beef', region: 'Indian', milkYield: '3-5 liters/day', specialty: 'Heat tolerance, disease resistance' },
+      'Krishna Valley': { characteristics: 'Black, compact, well-developed udder', origin: 'Andhra Pradesh/Karnataka', weight: '350-400 kg (female), 450-500 kg (male)', type: 'Dairy', region: 'Indian', milkYield: '6-8 liters/day', specialty: 'Good milk composition' },
+      'Khillari': { characteristics: 'Grey/white, long lyre-shaped horns, athletic build', origin: 'Maharashtra/Karnataka', weight: '300-350 kg (female), 350-400 kg (male)', type: 'Draft', region: 'Indian', milkYield: '2-4 liters/day', specialty: 'Speed, endurance, drought tolerance' }
+    };
+
+    // --- State & elements ---
+    let selectedRegion = 'all';
+    let selectedImage = null;
+    let currentStream = null;
+
+    const elements = {
+      allBreedsBtn: document.getElementById('allBreedsBtn'),
+      indianBreedsBtn: document.getElementById('indianBreedsBtn'),
+      internationalBreedsBtn: document.getElementById('internationalBreedsBtn'),
+      toggleDatabaseBtn: document.getElementById('toggleDatabaseBtn'),
+      breedDatabase: document.getElementById('breedDatabase'),
+      breedGrid: document.getElementById('breedGrid'),
+      uploadBtn: document.getElementById('uploadBtn'),
+      fileInput: document.getElementById('fileInput'),
+      cameraBtn: document.getElementById('cameraBtn'),
+      cameraControls: document.getElementById('cameraControls'),
+      captureBtn: document.getElementById('captureBtn'),
+      stopCameraBtn: document.getElementById('stopCameraBtn'),
+      cameraPreview: document.getElementById('cameraPreview'),
+      video: document.getElementById('video'),
+      imagePreview: document.getElementById('imagePreview'),
+      selectedImageEl: document.getElementById('selectedImage'),
+      analyzeBtn: document.getElementById('analyzeBtn'),
+      canvas: document.getElementById('canvas'),
+      initialState: document.getElementById('initialState'),
+      loadingState: document.getElementById('loadingState'),
+      results: document.getElementById('results'),
+      mainPrediction: document.getElementById('mainPrediction'),
+      alternatives: document.getElementById('alternatives'),
+      alternativesList: document.getElementById('alternativesList'),
+      resetBtn: document.getElementById('resetBtn'),
+      countAll: document.getElementById('countAll'),
+      countIndian: document.getElementById('countIndian'),
+      countInternational: document.getElementById('countInternational')
+    };
+
+    // --- Init ---
+    function init(){
+      setupEventListeners();
+      updateBreedDatabase();
+    }
+
+    function setupEventListeners(){
+      elements.allBreedsBtn.addEventListener('click', ()=>setSelectedRegion('all'));
+      elements.indianBreedsBtn.addEventListener('click', ()=>setSelectedRegion('indian'));
+      elements.internationalBreedsBtn.addEventListener('click', ()=>setSelectedRegion('international'));
+      elements.toggleDatabaseBtn.addEventListener('click', toggleDatabase);
+
+      elements.uploadBtn.addEventListener('click', ()=>elements.fileInput.click());
+      elements.fileInput.addEventListener('change', handleImageUpload);
+
+      elements.cameraBtn.addEventListener('click', startCamera);
+      elements.captureBtn.addEventListener('click', captureImage);
+      elements.stopCameraBtn.addEventListener('click', stopCamera);
+
+      elements.analyzeBtn.addEventListener('click', analyzeImage);
+      elements.resetBtn.addEventListener('click', resetAnalysis);
+    }
+
+    // --- UI helpers ---
+    function setSelectedRegion(region){
+      selectedRegion = region;
+      // reset classes then add active
+      [elements.allBreedsBtn, elements.indianBreedsBtn, elements.internationalBreedsBtn].forEach(btn=>{
+        btn.className = 'px-4 py-2 rounded-md transition-colors text-gray-600 hover:bg-gray-100';
+      });
+      if(region==='all') elements.allBreedsBtn.className = 'px-4 py-2 rounded-md transition-colors bg-blue-500 text-white';
+      if(region==='indian') elements.indianBreedsBtn.className = 'px-4 py-2 rounded-md transition-colors bg-orange-500 text-white';
+      if(region==='international') elements.internationalBreedsBtn.className = 'px-4 py-2 rounded-md transition-colors bg-green-500 text-white';
+      updateBreedDatabase();
+    }
+
+    function toggleDatabase(){
+      const wasHidden = elements.breedDatabase.classList.contains('hidden');
+      elements.breedDatabase.classList.toggle('hidden');
+      elements.toggleDatabaseBtn.textContent = wasHidden ? 'Hide Breed Database' : 'View Breed Database';
+    }
+
+    function updateBreedDatabase(){
+      const entries = Object.entries(cattleBreeds);
+      const counts = { all: entries.length, indian: entries.filter(e=>e[1].region==='Indian').length, international: entries.filter(e=>e[1].region==='International').length };
+      elements.countAll.textContent = counts.all;
+      elements.countIndian.textContent = counts.indian;
+      elements.countInternational.textContent = counts.international;
+
+      const filtered = entries.filter(([name,info])=>{
+        if(selectedRegion==='all') return true;
+        if(selectedRegion==='indian') return info.region === 'Indian';
+        if(selectedRegion==='international') return info.region === 'International';
+        return true;
+      });
+
+      elements.breedGrid.innerHTML = filtered.map(([name,info])=>{
+        return `
+          <div class="p-4 rounded-lg border-2 ${info.region==='Indian' ? 'border-orange-200 bg-orange-50' : 'border-blue-200 bg-blue-50'}">
+            <div class="flex items-center gap-2 mb-2">
+              <h3 class="font-bold text-lg text-gray-800">${name}</h3>
+              <span class="px-2 py-1 rounded-full text-xs font-medium ${info.region==='Indian' ? 'bg-orange-200 text-orange-800' : 'bg-blue-200 text-blue-800'}">${info.region}</span>
+            </div>
+            <div class="space-y-1 text-sm">
+              <p><strong>Origin:</strong> ${info.origin}</p>
+              <p><strong>Type:</strong> ${info.type}</p>
+              <p><strong>Weight:</strong> ${info.weight}</p>
+              ${info.milkYield ? `<p><strong>Milk Yield:</strong> ${info.milkYield}</p>` : ''}
+              <p><strong>Features:</strong> ${info.characteristics}</p>
+              ${info.specialty ? `<p><strong>Specialty:</strong> ${info.specialty}</p>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // --- Image handling ---
+    function handleImageUpload(e){
+      const file = e.target.files && e.target.files[0];
+      if(!file) return;
+      if(!file.type.startsWith('image/')) { alert('Please upload an image file'); return; }
+      const reader = new FileReader();
+      reader.onload = (ev)=>{
+        selectedImage = ev.target.result;
+        elements.selectedImageEl.src = selectedImage;
+        elements.imagePreview.classList.remove('hidden');
+        elements.cameraPreview.classList.add('hidden');
+        elements.initialState.classList.add('hidden');
+        resetResults();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function startCamera(){
+      try{
+        currentStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        elements.video.srcObject = currentStream;
+        elements.cameraBtn.classList.add('hidden');
+        elements.cameraControls.classList.remove('hidden');
+        elements.cameraPreview.classList.remove('hidden');
+        elements.imagePreview.classList.add('hidden');
+      }catch(err){
+        console.error('camera error',err);
+        alert('Camera access failed: ' + (err.message || err));
+      }
+    }
+
+    function captureImage(){
+      const video = elements.video;
+      const canvas = elements.canvas;
+      if(!video || video.readyState < 2) { alert('Camera not ready yet'); return; }
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      selectedImage = canvas.toDataURL('image/jpeg');
+      elements.selectedImageEl.src = selectedImage;
+      elements.imagePreview.classList.remove('hidden');
+      stopCamera();
+      resetResults();
+    }
+
+    function stopCamera(){
+      if(currentStream){
+        currentStream.getTracks().forEach(t=>t.stop());
+        currentStream = null;
+      }
+      elements.cameraBtn.classList.remove('hidden');
+      elements.cameraControls.classList.add('hidden');
+      elements.cameraPreview.classList.add('hidden');
+    }
+
+    // --- Analysis (simulated) ---
+    function analyzeImage(){
+      if(!selectedImage){ alert('Please select or capture an image first.'); return; }
+      elements.initialState.classList.add('hidden');
+      elements.loadingState.classList.remove('hidden');
+      elements.results.classList.add('hidden');
+      elements.analyzeBtn.disabled = true;
+      elements.analyzeBtn.textContent = 'Analyzing...';
+
+      // simulate async work (replace with real model call)
+      setTimeout(async ()=>{
+        try{
+          const result = await simulateAIPrediction(selectedImage, selectedRegion);
+          displayResults(result);
+        }catch(err){
+          console.error(err);
+          alert('Analysis failed');
+        }finally{
+          elements.loadingState.classList.add('hidden');
+          elements.analyzeBtn.disabled = false;
+          elements.analyzeBtn.textContent = 'Analyze Breed';
+        }
+      }, 700);
+    }
+
+    function simulateAIPrediction(imageDataUrl, preferredRegion='all'){
+      // This is a deterministic-ish simulation: pick a random breed from the filtered list,
+      // compute confidence and two alternative matches.
+      return new Promise((resolve)=>{
+        const available = Object.keys(cattleBreeds).filter(b=>{
+          if(preferredRegion==='all') return true;
+          if(preferredRegion==='indian') return cattleBreeds[b].region === 'Indian';
+          if(preferredRegion==='international') return cattleBreeds[b].region === 'International';
+          return true;
+        });
+        if(available.length===0) { resolve({ breed: null, confidence: 0, alternatives: [] }); return; }
+
+        // choose main
+        const mainIndex = Math.floor(Math.random()*available.length);
+        const mainBreed = available[mainIndex];
+        const mainConf = +(0.6 + Math.random()*0.35).toFixed(2); // 0.60 - 0.95
+
+        // build alternatives
+        const others = available.filter((_,i)=>i!==mainIndex);
+        shuffleArray(others);
+        const alternatives = others.slice(0,2).map(b=>({ breed: b, confidence: +(0.2 + Math.random()*0.5).toFixed(2) })).sort((a,b)=>b.confidence - a.confidence);
+
+        resolve({ breed: mainBreed, confidence: mainConf, alternatives });
+      });
+    }
+
+    // small utility
+    function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+
+    // --- Display results ---
+    function displayResults({ breed, confidence, alternatives }){
+      elements.results.classList.remove('hidden');
+      elements.mainPrediction.innerHTML = '';
+      elements.alternativesList.innerHTML = '';
+
+      if(!breed){
+        elements.mainPrediction.innerHTML = '<div class="text-center text-red-600">No breed could be determined.</div>';
+        elements.alternatives.classList.add('hidden');
+        return;
+      }
+
+      const info = cattleBreeds[breed];
+      const confPct = Math.round(confidence*100);
+
+      elements.mainPrediction.innerHTML = `
+        <div class="flex gap-4 items-start">
+          <img src="${selectedImage}" alt="preview" class="w-28 h-28 rounded-lg object-cover border" />
+          <div>
+            <h3 class="text-xl font-bold">${breed} <span class="text-sm font-medium text-gray-600">(${confPct}% confidence)</span></h3>
+            <p class="text-sm mt-2"><strong>Type:</strong> ${info.type}</p>
+            <p class="text-sm"><strong>Origin:</strong> ${info.origin}</p>
+            <p class="text-sm"><strong>Weight:</strong> ${info.weight}</p>
+            ${info.milkYield ? `<p class="text-sm"><strong>Milk Yield:</strong> ${info.milkYield}</p>` : ''}
+            <p class="mt-2 text-sm text-gray-700"><strong>Notes:</strong> ${info.characteristics}${info.specialty? ' • ' + info.specialty : ''}</p>
+          </div>
+        </div>
+      `;
+
+      if(alternatives && alternatives.length>0){
+        elements.alternatives.classList.remove('hidden');
+        alternatives.forEach(a=>{
+          const pct = Math.round(a.confidence*100);
+          const item = document.createElement('div');
+          item.className = 'p-2 border rounded flex items-center justify-between';
+          item.innerHTML = `
+            <div>
+              <div class="font-semibold">${a.breed}</div>
+              <div class="text-xs text-gray-600">${pct}%</div>
+            </div>
+            <button class="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm">View</button>
+          `;
+          // clicking view will swap main prediction contents to that breed
+          const btn = item.querySelector('button');
+          btn.addEventListener('click', ()=>{
+            // replace with that breed as if selected (confidence taken from alternative)
+            displayResults({ breed: a.breed, confidence: a.confidence, alternatives: alternatives.filter(x=>x.breed!==a.breed).concat([{breed: breed, confidence}]).slice(0,2) });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          });
+          elements.alternativesList.appendChild(item);
+        });
+      } else {
+        elements.alternatives.classList.add('hidden');
+      }
+    }
+
+    function resetAnalysis(){
+      selectedImage = null;
+      elements.selectedImageEl.src = '';
+      elements.imagePreview.classList.add('hidden');
+      elements.initialState.classList.remove('hidden');
+      elements.results.classList.add('hidden');
+      elements.alternatives.classList.add('hidden');
+      elements.mainPrediction.innerHTML = '';
+    }
+
+    function resetResults(){
+      elements.results.classList.add('hidden');
+      elements.alternatives.classList.add('hidden');
+      elements.mainPrediction.innerHTML = '';
+      elements.alternativesList.innerHTML = '';
+    }
+
+    // --- Start ---
+    init();
+  </script>
+</body>
+</html>
